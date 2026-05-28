@@ -14,7 +14,7 @@ from __future__ import annotations
 
 import os
 import sqlite3
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 
 _DEFAULT_PATH = Path(__file__).resolve().parent.parent / "flights.db"
@@ -82,7 +82,7 @@ def upsert_route(
         cur = conn.execute(
             "INSERT INTO routes (origin, destination, depart_date, return_date, label, created_at) "
             "VALUES (?, ?, ?, ?, ?, ?)",
-            (origin, destination, depart_date, return_date, label, datetime.utcnow().isoformat()),
+            (origin, destination, depart_date, return_date, label, datetime.now(timezone.utc).isoformat()),
         )
         return int(cur.lastrowid)
 
@@ -104,7 +104,7 @@ def insert_snapshot(route_id: int, price: float, currency: str, carrier: str = "
         conn.execute(
             "INSERT INTO snapshots (route_id, price, currency, carrier, checked_at) "
             "VALUES (?, ?, ?, ?, ?)",
-            (route_id, price, currency, carrier, datetime.utcnow().isoformat()),
+            (route_id, price, currency, carrier, datetime.now(timezone.utc).isoformat()),
         )
 
 
