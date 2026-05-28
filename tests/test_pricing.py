@@ -13,7 +13,6 @@ def test_demo_returns_price():
 
 
 def test_demo_price_is_stable_within_day():
-    """Same inputs on the same UTC day → same price."""
     from pricing import _fetch_demo
     r1 = _fetch_demo("WAW", "LON", "2026-10-01", "")
     r2 = _fetch_demo("WAW", "LON", "2026-10-01", "")
@@ -25,3 +24,10 @@ def test_demo_roundtrip_costs_more():
     one_way = _fetch_demo("KRK", "BCN", "2026-08-15", "")
     roundtrip = _fetch_demo("KRK", "BCN", "2026-08-15", "2026-08-22")
     assert roundtrip.price > one_way.price
+
+
+def test_demo_mode_active_without_key(monkeypatch):
+    monkeypatch.delenv("SKY_SCRAPPER_API_KEY", raising=False)
+    import importlib, pricing
+    importlib.reload(pricing)
+    assert pricing.DEMO_MODE is True
