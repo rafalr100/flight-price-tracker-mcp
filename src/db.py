@@ -1,0 +1,118 @@
+"""
+SQLite storage for the Flight Price Tracker MCP server.
+
+Two tables:
+  routes     — the routes the user wants to track (one row per route)
+  snapshots  — every price reading, timestamped (many rows per route)
+
+The database file lives next to this module by default, or at the path given by
+the FLIGHT_DB_PATH environment variable. Everything is local — no data leaves the
+machine.
+"""
+
+from __future__ import annotations
+
+import os
+import sqlite3
+from datetime import datetime
+from pathlib import Path
+
+_DEFAULT_PATH = Path(__file__).resolve().parent.parent / "flights.db"
+DB_PATH = Path(os.environ.get("FLIGHT_DB_PATH", _DEFAULT_PATH))
+
+
+def _connect() -> sqlite3.Connection:
+    conn = sqlite3.connect(DB_PATH)
+    conn.row_factory = sqlite3.Row
+    return conn
+
+
+def init_db() -> None:
+    """Create tables if they do not yet exist."""
+    with _connect() as conn:
+        conn.executescript(
+            """
+            CREATE TABLE IF NOT EXISTS routes (
+                id          INTEGER PRIMARY KEY AUTOINCREMENT,
+                origin      TEXT NOT NULL,
+                destination TEXT NOT NULL,
+                depart_date TEXT NOT NULL,
+                return_date TEXT NOT NULL DEFAULT '',
+                label       TEXT NOT NULL DEFAULT '',
+                created_at  TEXT NOT NULL,
+                UNIQUE(origin, destination, depart_date, return_date)
+            );
+
+            CREATE TABLE IF NOT EXISTS snapshots (
+                id         INTEGER PRIMARY KEY AUTOINCREMENT,
+                route_id   INTEGER NOT NULL,
+                price      REAL NOT NULL,
+                currency   TEXT NOT NULL,
+                carrier    TEXT NOT NULL DEFAULT '',
+                checked_at TEXT NOT NULL,
+                FOREIGN KEY(route_id) REFERENCES routes(id) ON DELETE CASCADE
+            );
+
+            CREATE INDEX IF NOT EXISTS idx_snapshots_route
+                ON snapshots(route_id, checked_at);
+            """
+        )
+
+
+def upsert_route(
+    origin: str,
+    destination: str,
+    depart_date: str,
+    return_date: str,
+    label: str,
+) -> int:
+    """Insert a route, or return the existing id if the same route is already tracked."""
+    with _connect() as conn:
+        cur = conn.execute(
+            "SELECT id FROM routes WHERE origin=? AND destination=? "
+            "AND depart_date=? AND return_date=?",
+            (origin, destination, depart_date, return_date),
+        )
+        row = cur.fetchone()
+        if row:
+            if label:
+                conn.execute("UPDATE routes SET label=? WHERE id=?", (label, row["id"]))
+            return int(row["id"])
+
+        cur = conn.execute(
+            "INSERT INTO routes (origin, destination, depart_date, return_date, label, created_at) "
+            "VALUES (?, ?, ?, ?, ?, ?)",
+            (origin, destination, depart_date, return_date, label, datetime.utcnow().isoformat()),
+        )
+        return int(cur.lastrowid)
+
+
+def get_routes() -> list[dict]:
+    with _connect() as conn:
+        rows = conn.execute("SELECT * FROM routes ORDER BY id").fetchall()
+        return [dict(r) for r in rows]
+
+
+def get_route_by_id(route_id: int) -> dict | None:
+    with _connect() as conn:
+        row = conn.execute("SELECT * FROM routes WHERE id=?", (route_id,)).fetchone()
+        return dict(row) if row else None
+
+
+def insert_snapshot(route_id: int, price: float, currency: str, carrier: str = "") -> None:
+    with _connect() as conn:
+        conn.execute(
+            "INSERT INTO snapshots (route_id, price, currency, carrier, checked_at) "
+            "VALUES (?, ?, ?, ?, ?)",
+            (route_id, price, currency, carrier, datetime.utcnow().isoformat()),
+        )
+
+
+def get_snapshots(route_id: int) -> list[dict]:
+    """Return all snapshots for a route, oldest first."""
+    with _connect() as conn:
+        rows = conn.execute(
+            "SELECT * FROM snapshots WHERE route_id=? ORDER BY checked_at",
+            (route_id,),
+        ).fetchall()
+        return [dict(r) for r in rows]
