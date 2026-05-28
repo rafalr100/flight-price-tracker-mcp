@@ -23,7 +23,7 @@ import urllib.parse
 import urllib.request
 import json
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timezone
 
 TEQUILA_API_KEY = os.environ.get("TEQUILA_API_KEY", "").strip()
 DEMO_MODE = not bool(TEQUILA_API_KEY)
@@ -83,22 +83,25 @@ def _fetch_live(origin, destination, depart_date, return_date) -> PriceResult:
 
 def _fetch_demo(origin, destination, depart_date, return_date) -> PriceResult:
     """
-    Deterministic-ish demo price. Base price is derived from the route so each
-    route has a stable 'character', then we add daily wander + a sinusoidal
-    seasonal-ish component + noise so the saved history looks like a real curve.
+    Deterministic-ish demo price. Base price is derived from the origin+destination
+    pair only (so one-way and round-trip share the same route character), then we
+    add daily wander + a sinusoidal seasonal component + noise. Round-trips are
+    always more expensive: the one-way price is computed first, then multiplied.
     """
-    seed_src = f"{origin}{destination}{depart_date}{return_date}".encode()
+    # Seed only on route, NOT on dates — keeps one-way/round-trip comparable
+    seed_src = f"{origin}{destination}".encode()
     base_seed = int(hashlib.sha256(seed_src).hexdigest(), 16) % 10_000
-    base = 350 + (base_seed % 1400)  # 350–1750 PLN base
-    if return_date:
-        base *= 1.8  # round trips cost more
+    base = 350 + (base_seed % 1400)  # 350–1750 PLN one-way base
 
-    # Wander by the current day so repeated checks over days differ.
-    day_ordinal = datetime.utcnow().toordinal()
+    # Wander by the current day so repeated checks over days differ
+    day_ordinal = datetime.now(timezone.utc).toordinal()
     rng = random.Random(base_seed + day_ordinal)
     seasonal = math.sin(day_ordinal / 9.0) * (base * 0.08)
     noise = rng.uniform(-0.06, 0.06) * base
-    price = max(99, round(base + seasonal + noise, -1))  # round to nearest 10
+    one_way_price = max(99, round(base + seasonal + noise, -1))
+
+    # Round-trips always cost more than one-way
+    price = one_way_price * 1.8 if return_date else one_way_price
     return PriceResult(price=float(price), currency="PLN", carrier="DEMO Air")
 
 
