@@ -6,7 +6,7 @@ Step-by-step guide to run the Flight Price Tracker MCP server with Claude Deskto
 
 - **Python 3.10+** (check with `python3 --version`)
 - **Claude Desktop** app (macOS or Windows)
-- Optional: a free **Kiwi.com Tequila** API key for live prices (the server works in demo mode without it)
+- Optional: a free **RapidAPI key** for live prices (the server works in demo mode without it)
 
 ## 1. Get the code
 
@@ -39,11 +39,8 @@ You should see `OK - 5 tools registered`.
 The Claude config needs full absolute paths, not relative ones.
 
 ```bash
-# Path to the Python interpreter inside the venv:
-echo "$(pwd)/.venv/bin/python"
-
-# Path to the server script:
-echo "$(pwd)/src/server.py"
+echo "$(pwd)/.venv/bin/python"   # Python interpreter
+echo "$(pwd)/src/server.py"      # Server script
 ```
 
 Copy both — you'll paste them in the next step.
@@ -55,8 +52,6 @@ Open the config file:
 - **macOS:** `~/Library/Application Support/Claude/claude_desktop_config.json`
 - **Windows:** `%APPDATA%\Claude\claude_desktop_config.json`
 
-If `mcpServers` already exists, add `flight-price-tracker` inside it. Otherwise create the whole structure:
-
 ```json
 {
   "mcpServers": {
@@ -64,61 +59,58 @@ If `mcpServers` already exists, add `flight-price-tracker` inside it. Otherwise 
       "command": "/Users/you/flight-price-tracker-mcp/.venv/bin/python",
       "args": ["/Users/you/flight-price-tracker-mcp/src/server.py"],
       "env": {
-        "TEQUILA_API_KEY": ""
+        "SKY_SCRAPPER_API_KEY": ""
       }
     }
   }
 }
 ```
 
-Replace the two paths with what you copied in step 4. Leave `TEQUILA_API_KEY` empty for demo mode, or paste your key for live prices.
+Replace the two paths with what you copied in step 4. Leave `SKY_SCRAPPER_API_KEY` empty for demo mode, or paste your key for live prices.
 
 ## 6. Restart Claude Desktop
 
-Fully quit (not just close the window) and reopen. The tools appear under the connectors/tools menu. Look for `flight-price-tracker`.
+Fully quit (not just close the window) and reopen. Look for `flight-price-tracker` in the tools menu.
 
 ## 7. Try it
-
-Type to Claude:
 
 ```
 Track a route from KRK to BCN, departing 2026-08-15, returning 2026-08-22, label it "Test".
 ```
 
-Then:
+Then: `Check the price for that route.`
 
-```
-Check the price for that route.
-```
+## Getting a live API key (free)
 
-Run `check_price` a handful of times (it'll vary day to day even in demo mode), then:
+1. Go to [rapidapi.com/apiheya/api/sky-scrapper](https://rapidapi.com/apiheya/api/sky-scrapper)
+2. Sign in or create a free RapidAPI account
+3. Click **Subscribe to Test** → select the **BASIC** plan (free, 100 requests/month)
+4. Copy your `X-RapidAPI-Key` from the code snippets panel
+5. Paste it into `SKY_SCRAPPER_API_KEY` in your Claude config (step 5)
+6. Restart Claude Desktop
 
-```
-Analyze the Test route — should I buy?
-```
+### Request budget
 
-## Going live with real prices
+| Action | API requests used |
+|--------|-----------------|
+| `check_price` (new airport) | 2 (lookup + search) |
+| `check_price` (known airport) | 1 (search only) |
+| `add_route`, `list_routes`, `analyze_route` | 0 |
 
-1. Sign up at [tequila.kiwi.com](https://tequila.kiwi.com) and create a **Search API** solution.
-2. Copy the API key.
-3. Paste it into `TEQUILA_API_KEY` in the config (step 5).
-4. Restart Claude Desktop.
+Airport lookups are cached locally in SQLite — each airport is looked up **once ever**, so after the first check of a route all subsequent checks cost just 1 request.
 
-The server auto-detects the key and switches from demo to live. Note that Kiwi expects IATA codes (e.g. `WAW`, `KRK`, `LON`, `BCN`).
-
-## Automating the daily check (optional)
-
-The smarter the verdict, the more snapshots you have — so it helps to check routes automatically. A small daily cron job that calls each route's `check_price` keeps the history growing without you lifting a finger. Ask Claude to generate a `check_all.py` + cron/launchd entry if you want this.
+**Example:** 3 routes checked daily = ~90 requests/month → comfortably within the free 100 limit.
 
 ## Troubleshooting
 
 | Symptom | Fix |
 |---------|-----|
-| Tools don't appear in Claude | Check the JSON is valid (no trailing commas), paths are absolute, then fully restart Claude |
+| Tools don't appear in Claude | Check JSON validity (no trailing commas), paths are absolute, fully restart Claude |
 | `spawn ... ENOENT` in logs | The `command` path to Python is wrong — re-run step 4 |
-| `not enough data` verdict | You need at least 5 snapshots; run `check_price` more times |
-| Live mode returns no flights | Verify IATA codes and that the date isn't in the past |
+| `not enough data` verdict | Need at least 5 snapshots; run `check_price` more times |
+| Live mode: no flights found | Verify IATA codes are correct and date is in the future |
+| Live mode: HTTP 429 | Monthly request limit reached; wait for next billing cycle or upgrade plan |
 
-Claude Desktop logs are at:
+Claude Desktop logs:
 - **macOS:** `~/Library/Logs/Claude/`
 - **Windows:** `%APPDATA%\Claude\logs\`
