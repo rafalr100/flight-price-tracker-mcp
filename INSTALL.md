@@ -11,7 +11,7 @@ Step-by-step guide to run the Flight Price Tracker MCP server with Claude Deskto
 ## 1. Get the code
 
 ```bash
-git clone https://github.com/YOUR_LOGIN/flight-price-tracker-mcp.git
+git clone https://github.com/rafalr100/flight-price-tracker-mcp.git
 cd flight-price-tracker-mcp
 ```
 
