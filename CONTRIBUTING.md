@@ -5,7 +5,7 @@ Thank you for considering a contribution to Flight Price Tracker MCP!
 ## Getting started
 
 ```bash
-git clone https://github.com/YOUR_LOGIN/flight-price-tracker-mcp.git
+git clone https://github.com/rafalr100/flight-price-tracker-mcp.git
 cd flight-price-tracker-mcp
 python3 -m venv .venv
 .venv/bin/pip install -r requirements.txt
