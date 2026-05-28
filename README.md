@@ -1,5 +1,9 @@
 # Flight Price Tracker MCP
 
+[![Python](https://img.shields.io/badge/python-3.10%2B-blue.svg)](https://www.python.org/)
+[![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
+[![MCP](https://img.shields.io/badge/MCP-compatible-blueviolet.svg)](https://modelcontextprotocol.io)
+
 > Track flight prices over time and learn **when to buy** — without any paid price-history API.
 
 A [Model Context Protocol](https://modelcontextprotocol.io) server that lets Claude track flight prices for routes you care about, build a price history automatically, and tell you whether today's price is a good deal or worth waiting on.
@@ -89,6 +93,10 @@ With no API key set, the server generates plausible prices — deterministic per
 >
 > **You:** Should I buy the Holiday tickets now?
 > **Claude:** *(analyze_route)* At 1,090 PLN this is cheaper than 80% of past readings. **BUY — good deal.**
+
+## Contributing
+
+Contributions are welcome! See [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
 
 ## License
 
