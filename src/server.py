@@ -16,9 +16,10 @@ Tools exposed:
   - analyze_route      Compute trend, min/max/avg/percentile and a buy/wait verdict
 
 Price data source:
-  By default the server uses the Kiwi.com Tequila search API. Set TEQUILA_API_KEY
-  to enable live lookups. Without a key, check_price runs in DEMO mode and generates
-  a plausible price so you can try the full flow end-to-end before wiring real data.
+  By default the server uses the Sky Scrapper API (Skyscanner data) on RapidAPI. Set
+  SKY_SCRAPPER_API_KEY to enable live lookups. Without a key, check_price runs in DEMO
+  mode and generates a plausible price so you can try the full flow end-to-end before
+  wiring real data.
 """
 
 from __future__ import annotations
@@ -60,10 +61,10 @@ def _verdict(current: float, history: list[float]) -> tuple[str, str]:
     n = len(history)
     if n < 5:
         return (
-            "za mało danych",
-            f"Mam dopiero {n} zapisanych cen dla tej trasy. "
-            f"Potrzebuję co najmniej 5, żeby ocenić czy cena jest dobra. "
-            f"Sprawdzaj trasę regularnie — każde sprawdzenie buduje historię.",
+            "not enough data",
+            f"I only have {n} saved prices for this route. "
+            f"I need at least 5 to judge whether the price is good. "
+            f"Check the route regularly — every check builds up the history.",
         )
 
     avg = statistics.mean(history)
@@ -76,26 +77,26 @@ def _verdict(current: float, history: list[float]) -> tuple[str, str]:
 
     if current <= lo:
         return (
-            "KUPUJ — najniższa cena w historii",
-            f"Obecna cena {current:,.0f} jest najniższa jaką widziałem "
-            f"(dotychczasowe minimum: {lo:,.0f}). To {abs(delta_pct)}% poniżej średniej.",
+            "BUY — lowest price on record",
+            f"The current price {current:,.0f} is the lowest I've seen "
+            f"(previous minimum: {lo:,.0f}). That's {abs(delta_pct)}% below the average.",
         )
     if percentile >= 70:
         return (
-            "KUPUJ — okazja",
-            f"Cena jest tańsza niż {percentile}% wcześniejszych wycen "
-            f"({delta_pct}% względem średniej {avg:,.0f}). Dobry moment.",
+            "BUY — good deal",
+            f"The price is cheaper than {percentile}% of earlier quotes "
+            f"({delta_pct}% vs the average of {avg:,.0f}). Good moment.",
         )
     if percentile <= 30:
         return (
-            "CZEKAJ — drogo",
-            f"Cena jest droższa niż {100 - percentile}% wcześniejszych wycen "
-            f"(+{delta_pct}% względem średniej). Prawdopodobnie spadnie.",
+            "WAIT — expensive",
+            f"The price is more expensive than {100 - percentile}% of earlier quotes "
+            f"(+{delta_pct}% vs the average). It will likely drop.",
         )
     return (
-        "NEUTRALNIE",
-        f"Cena jest w okolicach średniej ({delta_pct:+}% od {avg:,.0f}). "
-        f"Bez wyraźnego sygnału — możesz poczekać na lepszą okazję lub kupić jeśli pasuje termin.",
+        "NEUTRAL",
+        f"The price is around the average ({delta_pct:+}% from {avg:,.0f}). "
+        f"No clear signal — you can wait for a better deal or buy if the dates suit you.",
     )
 
 
@@ -118,7 +119,7 @@ def add_route(
         destination: IATA airport/city code, e.g. "LON", "BCN".
         depart_date: Departure date in YYYY-MM-DD.
         return_date: Optional return date YYYY-MM-DD for round trips (empty = one-way).
-        label: Optional friendly name, e.g. "Wakacje Hiszpania".
+        label: Optional friendly name, e.g. "Spain holiday".
 
     Returns a confirmation with the new route id.
     """
@@ -129,15 +130,15 @@ def add_route(
         if return_date:
             datetime.strptime(return_date, "%Y-%m-%d")
     except ValueError:
-        return "Błąd: daty muszą być w formacie YYYY-MM-DD (np. 2026-08-15)."
+        return "Error: dates must be in YYYY-MM-DD format (e.g. 2026-08-15)."
 
     route_id = upsert_route(origin, destination, depart_date, return_date, label)
-    trip = "w obie strony" if return_date else "w jedną stronę"
+    trip = "round trip" if return_date else "one-way"
     name = f' "{label}"' if label else ""
     return (
-        f"Dodano trasę #{route_id}{name}: {origin} → {destination}, "
-        f"wylot {depart_date}{(', powrót ' + return_date) if return_date else ''} ({trip}). "
-        f"Użyj check_price, żeby zapisać pierwszą wycenę."
+        f"Added route #{route_id}{name}: {origin} → {destination}, "
+        f"departing {depart_date}{(', returning ' + return_date) if return_date else ''} ({trip}). "
+        f"Use check_price to save the first quote."
     )
 
 
@@ -146,20 +147,20 @@ def list_routes() -> str:
     """List all tracked routes with how many price snapshots each has."""
     routes = get_routes()
     if not routes:
-        return "Brak śledzonych tras. Dodaj pierwszą przez add_route."
+        return "No tracked routes yet. Add your first one with add_route."
 
-    lines = ["Śledzone trasy:\n"]
+    lines = ["Tracked routes:\n"]
     for r in routes:
         snaps = get_snapshots(r["id"])
         last = ""
         if snaps:
             latest = snaps[-1]
-            last = f" · ostatnia cena {latest['price']:,.0f} {latest['currency']} ({latest['checked_at'][:10]})"
+            last = f" · last price {latest['price']:,.0f} {latest['currency']} ({latest['checked_at'][:10]})"
         label = f' "{r["label"]}"' if r["label"] else ""
-        trip = f", powrót {r['return_date']}" if r["return_date"] else ""
+        trip = f", returning {r['return_date']}" if r["return_date"] else ""
         lines.append(
             f"#{r['id']}{label}: {r['origin']} → {r['destination']}, "
-            f"wylot {r['depart_date']}{trip} — {len(snaps)} zapisów{last}"
+            f"departing {r['depart_date']}{trip} — {len(snaps)} snapshots{last}"
         )
     return "\n".join(lines)
 
@@ -175,7 +176,7 @@ def check_price(route_id: int) -> str:
     """
     route = get_route_by_id(route_id)
     if not route:
-        return f"Nie znaleziono trasy #{route_id}. Sprawdź list_routes."
+        return f"Route #{route_id} not found. Check list_routes."
 
     result: PriceResult = fetch_cheapest_price(
         origin=route["origin"],
@@ -184,21 +185,21 @@ def check_price(route_id: int) -> str:
         return_date=route["return_date"] or None,
     )
     if result.error:
-        return f"Nie udało się pobrać ceny: {result.error}"
+        return f"Could not fetch the price: {result.error}"
 
     insert_snapshot(route_id, result.price, result.currency, result.carrier)
 
     history = [s["price"] for s in get_snapshots(route_id)]
-    mode_note = " (DEMO — ustaw TEQUILA_API_KEY dla prawdziwych cen)" if DEMO_MODE else ""
+    mode_note = " (DEMO mode — set SKY_SCRAPPER_API_KEY for live prices)" if DEMO_MODE else ""
     msg = [
-        f"Trasa #{route_id} {route['origin']} → {route['destination']}{mode_note}",
-        f"Aktualna najtańsza cena: {_fmt_price(result.price, result.currency)}"
+        f"Route #{route_id} {route['origin']} → {route['destination']}{mode_note}",
+        f"Current cheapest price: {_fmt_price(result.price, result.currency)}"
         + (f" ({result.carrier})" if result.carrier else ""),
-        f"Zapisano snapshot. Łącznie zapisów: {len(history)}.",
+        f"Snapshot saved. Total snapshots: {len(history)}.",
     ]
     if len(history) >= 5:
         label, _ = _verdict(result.price, history[:-1] if len(history) > 1 else history)
-        msg.append(f"Wstępny werdykt: {label} — uruchom analyze_route po szczegóły.")
+        msg.append(f"Preliminary verdict: {label} — run analyze_route for details.")
     return "\n".join(msg)
 
 
@@ -212,12 +213,12 @@ def price_history(route_id: int) -> str:
     """
     route = get_route_by_id(route_id)
     if not route:
-        return f"Nie znaleziono trasy #{route_id}."
+        return f"Route #{route_id} not found."
     snaps = get_snapshots(route_id)
     if not snaps:
-        return f"Trasa #{route_id} nie ma jeszcze żadnych zapisów. Użyj check_price."
+        return f"Route #{route_id} has no snapshots yet. Use check_price."
 
-    lines = [f"Historia cen trasy #{route_id} ({route['origin']} → {route['destination']}):\n"]
+    lines = [f"Price history for route #{route_id} ({route['origin']} → {route['destination']}):\n"]
     for s in snaps:
         carrier = f" · {s['carrier']}" if s["carrier"] else ""
         lines.append(f"{s['checked_at'][:16]}  {s['price']:,.0f} {s['currency']}{carrier}")
@@ -235,10 +236,10 @@ def analyze_route(route_id: int) -> str:
     """
     route = get_route_by_id(route_id)
     if not route:
-        return f"Nie znaleziono trasy #{route_id}."
+        return f"Route #{route_id} not found."
     snaps = get_snapshots(route_id)
     if not snaps:
-        return f"Trasa #{route_id} nie ma jeszcze danych. Użyj check_price kilka razy."
+        return f"Route #{route_id} has no data yet. Use check_price a few times."
 
     prices = [s["price"] for s in snaps]
     currency = snaps[-1]["currency"]
@@ -246,16 +247,16 @@ def analyze_route(route_id: int) -> str:
     avg = statistics.mean(prices)
 
     # Recent trend: compare last third vs first third of the history.
-    trend = "stabilny"
+    trend = "stable"
     if len(prices) >= 6:
         third = len(prices) // 3
         early = statistics.mean(prices[:third])
         late = statistics.mean(prices[-third:])
         diff = round(100 * (late - early) / early, 1)
         if diff > 3:
-            trend = f"rosnący (+{diff}% w czasie obserwacji)"
+            trend = f"rising (+{diff}% over the observation window)"
         elif diff < -3:
-            trend = f"malejący ({diff}% w czasie obserwacji)"
+            trend = f"falling ({diff}% over the observation window)"
 
     label, explanation = _verdict(current, prices)
 
@@ -263,20 +264,20 @@ def analyze_route(route_id: int) -> str:
     try:
         d = datetime.strptime(route["depart_date"], "%Y-%m-%d").date()
         delta = (d - date.today()).days
-        days_to_departure = f"\nDo wylotu: {delta} dni"
+        days_to_departure = f"\nDays to departure: {delta}"
     except ValueError:
         pass
 
     return "\n".join([
-        f"Analiza trasy #{route_id}: {route['origin']} → {route['destination']}"
+        f"Analysis of route #{route_id}: {route['origin']} → {route['destination']}"
         + (f' "{route["label"]}"' if route["label"] else ""),
-        f"Liczba zapisów: {len(prices)}",
-        f"Aktualna cena: {current:,.0f} {currency}",
-        f"Najtaniej / najdrożej: {min(prices):,.0f} / {max(prices):,.0f} {currency}",
-        f"Średnia: {avg:,.0f} {currency}",
+        f"Snapshots: {len(prices)}",
+        f"Current price: {current:,.0f} {currency}",
+        f"Lowest / highest: {min(prices):,.0f} / {max(prices):,.0f} {currency}",
+        f"Average: {avg:,.0f} {currency}",
         f"Trend: {trend}" + days_to_departure,
         "",
-        f"Werdykt: {label}",
+        f"Verdict: {label}",
         explanation,
     ])
 
